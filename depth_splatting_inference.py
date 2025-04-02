@@ -53,13 +53,18 @@ def read_video_frames(video_path, process_length, target_fps, max_res, dataset="
     return frames, fps, original_height, original_width
 
 
+
 class DepthCrafterDemo:
+    '''
+
+    '''
     def __init__(
         self,
         unet_path: str,
         pre_trained_path: str,
         cpu_offload: str = "model",
     ):
+        # DiffusersUNetSpatioTemporalConditionModelDepthCrafter来自DepthCrafter
         unet = DiffusersUNetSpatioTemporalConditionModelDepthCrafter.from_pretrained(
             unet_path,
             low_cpu_mem_usage=True,
@@ -74,6 +79,7 @@ class DepthCrafterDemo:
         )
 
         # for saving memory, we can offload the model to CPU, or even run the model sequentially to save more memory
+        # 缺省 cpu_offload = "model" 不写的话，pipe.to("cuda")，不知道是否会变快。
         if cpu_offload is not None:
             if cpu_offload == "sequential":
                 # This will slow, but save more memory
@@ -97,11 +103,11 @@ class DepthCrafterDemo:
         input_video_path: str,
         output_video_path: str,
         process_length: int = -1,
-        num_denoising_steps: int = 8,
-        guidance_scale: float = 1.2,
+        num_denoising_steps: int = 8,  # 每一个轮次，会有8次循环，到进度条100%。就是这里设置的。
+        guidance_scale: float = 1.2,  # 这个不知道是什么
         window_size: int = 70,
-        overlap: int = 25,
-        max_res: int = 1024,
+        overlap: int = 25,  # 这个看起来是两个任务之间的重叠帧?
+        max_res: int = 1024,  # 这个是什么作用？看起来是限制最大资源数
         dataset: str = "open",
         target_fps: int = -1,
         seed: int = 42,
@@ -237,6 +243,8 @@ def DepthSplatting(
     )
 
     for i in range(0, num_frames, batch_size):
+        #打印当前的进度，以便于查看程序执行进度
+        print(f"Processing batch {i // batch_size + 1} of {num_frames // batch_size + 1}")
         batch_frames = input_frames[i:i+batch_size]
         batch_depth = video_depth[i:i+batch_size]
         batch_depth_vis = depth_vis[i:i+batch_size]
@@ -283,13 +291,14 @@ def main(
         unet_path=unet_path,
         pre_trained_path=pre_trained_path
     )
-
+    #打印进度，开始depth infer...
+    print("Starting depth inference...")
     video_depth, depth_vis = depthcrafter_demo.infer(
         input_video_path,
         output_video_path,
         process_length
     )
-
+    print("depth inference finished. Starting DepthSplatting...")
     DepthSplatting(
         input_video_path, 
         output_video_path, 
@@ -299,7 +308,7 @@ def main(
         process_length, 
         batch_size
     )
-
+    print("depth splatting finished. ")
 
 if __name__ == "__main__":
     Fire(main)
