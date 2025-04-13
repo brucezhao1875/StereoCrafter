@@ -4,8 +4,8 @@ import os
 import time
 
 # ---------- 参数配置 ----------
-video_path = "source_video/camel10.mp4"  # 替换成你的视频路径
-memmap_file = "source_video/video_frames.dat"  # 输出文件路径
+video_path = "./source_video/camel10.mp4"  # 替换成你的视频路径
+memmap_file = "./source_video/video_frames.dat"  # 输出文件路径
 batch_size = 100
 
 # ---------- 视频读取 ----------
