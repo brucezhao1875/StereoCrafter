@@ -47,15 +47,22 @@ def read_video_frames(video_path, process_length, target_fps, max_res, dataset="
         frames_idx = frames_idx[:process_length]
     print( f"==> final processing shape: {len(frames_idx), *vid.get_batch([0]).shape[1:]}.Now begin read in frames by vid.get_batch()"  )
     frames = []
-    for i in frames_idx:
-        start = time.time()
-        frame = vid[i]  # 或者 vid.get_batch([i])
-        frames.append(frame)
-        duration = time.time() - start
-        print(f"读取第 {i} 帧耗时: {duration:.4f} 秒")
-    frames = np.array(frames).astype("float32") / 255.0
-    #frames = vid.get_batch(frames_idx).asnumpy().astype("float32") / 255.0
-    print(f"==> read in frames successful.read_video_frames() finished.")
+    batch_size = 100  # 每次读取并处理100帧
+    for i in range(0, len(frames_idx), batch_size):
+        batch_frames = []
+        for j in range(i, min(i + batch_size, len(frames_idx))):
+            start = time.time()
+            frame = vid[frames_idx[j]].asnumpy().astype("float32") / 255.0  # 直接转换并归一化
+            batch_frames.append(frame)
+            duration = time.time() - start
+            print(f"读取第 {frames_idx[j]} 帧耗时: {duration:.4f} 秒")
+
+        # Stack the batch and append to frames list
+        frames.append(np.stack(batch_frames))
+
+    # Concatenate all batches and return the final frames
+    frames = np.concatenate(frames, axis=0)
+    print(f"==> read in frames successful. read_video_frames() finished.")
     return frames, fps, original_height, original_width
 
 class DepthCrafterDemo:
