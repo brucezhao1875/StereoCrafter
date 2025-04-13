@@ -1,3 +1,4 @@
+import time
 import gc
 import cv2
 import os
@@ -44,11 +45,17 @@ def read_video_frames(video_path, process_length, target_fps, max_res, dataset="
     )
     if process_length != -1 and process_length < len(frames_idx):
         frames_idx = frames_idx[:process_length]
-    print(
-        f"==> final processing shape: {len(frames_idx), *vid.get_batch([0]).shape[1:]}"
-    )
-    frames = vid.get_batch(frames_idx).asnumpy().astype("float32") / 255.0
-
+    print( f"==> final processing shape: {len(frames_idx), *vid.get_batch([0]).shape[1:]}.Now begin read in frames by vid.get_batch()"  )
+    frames = []
+    for i in frames_idx:
+        start = time.time()
+        frame = vid[i]  # 或者 vid.get_batch([i])
+        frames.append(frame)
+        duration = time.time() - start
+        print(f"读取第 {i} 帧耗时: {duration:.4f} 秒")
+    frames = np.array(frames).astype("float32") / 255.0
+    #frames = vid.get_batch(frames_idx).asnumpy().astype("float32") / 255.0
+    print(f"==> read in frames successful.read_video_frames() finished.")
     return frames, fps, original_height, original_width
 
 class DepthCrafterDemo:
