@@ -48,17 +48,14 @@ def read_video_frames(video_path, process_length, target_fps, max_res, dataset="
     print( f"==> final processing shape: {len(frames_idx), *vid.get_batch([0]).shape[1:]}.Now begin read in frames by vid.get_batch()"  )
     frames = []
     batch_size = 100  # 每次读取并处理100帧
-    for i in range(0, len(frames_idx), batch_size):
-        batch_frames = []
-        for j in range(i, min(i + batch_size, len(frames_idx))):
-            start = time.time()
-            frame = vid[frames_idx[j]].asnumpy().astype("float32") / 255.0  # 直接转换并归一化
-            batch_frames.append(frame)
-            duration = time.time() - start
-            print(f"读取第 {frames_idx[j]} 帧耗时: {duration:.4f} 秒")
 
-        # Stack the batch and append to frames list
-        frames.append(np.stack(batch_frames))
+    for i in range(0, len(frames_idx), batch_size):
+        start_batch = time.time()
+        # 读取一批帧
+        batch_frames = vid.get_batch(frames_idx[i:i + batch_size]).asnumpy().astype("float32") / 255.0
+        frames.append(batch_frames)
+        duration_batch = time.time() - start_batch
+        print(f"读取第 {i} 到 {min(i + batch_size, len(frames_idx))} 帧耗时: {duration_batch:.4f} 秒")
 
     # Concatenate all batches and return the final frames
     frames = np.concatenate(frames, axis=0)
