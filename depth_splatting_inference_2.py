@@ -203,7 +203,7 @@ class ForwardWarpStereo(nn.Module):
             return res, occlu_map
         
 
-def DepthSplatting(input_video_path, output_video_path, input_frames, target_fps, video_depth, depth_vis, max_disp, process_length, batch_size):
+def DepthSplatting(input_video_path, output_video_path,  video_depth, depth_vis, max_disp, process_length, batch_size):
     '''
     Depth-Based Video Splatting Using the Video Depth.
     Args:
@@ -214,14 +214,10 @@ def DepthSplatting(input_video_path, output_video_path, input_frames, target_fps
         process_length: The length of video to process.
         batch_size: The batch size for splatting to save GPU memory. 
     '''
-    #vid_reader = VideoReader(input_video_path, ctx=cpu(0))
-    #original_fps = vid_reader.get_avg_fps()
-    #input_frames = vid_reader[:].asnumpy() / 255.0
     t0 = time.time()
-
-    original_fps = target_fps
-    input_frames = input_frames
-
+    vid_reader = VideoReader(input_video_path, ctx=cpu(0))
+    original_fps = vid_reader.get_avg_fps()
+    input_frames = vid_reader[:].asnumpy() / 255.0
     if process_length != -1 and process_length < len(input_frames):
         input_frames = input_frames[:process_length]
         video_depth = video_depth[:process_length]
@@ -241,7 +237,7 @@ def DepthSplatting(input_video_path, output_video_path, input_frames, target_fps
     )
 
     t1 = time.time()
-    print(f"in DepthSplatting . prepare step  costs {t1 - t0:.2f} seconds.")
+    print(f"in DepthSplatting . prepare step including load videos  costs {t1 - t0:.2f} seconds.")
 
     for i in range(0, num_frames, batch_size):
         #打印当前的进度，以便于查看程序执行进度
@@ -284,7 +280,7 @@ def main(input_video_path: str, output_video_path: str, unet_path: str, pre_trai
     print("Starting depth inference...")  #打印进度，开始depth infer...
     input_frames, target_fps, video_depth, depth_vis = depthcrafter_demo.infer( input_video_path,output_video_path,process_length )
     print("depth inference finished. Starting DepthSplatting...")
-    DepthSplatting(input_video_path, output_video_path, input_frames, target_fps, video_depth, depth_vis,max_disp,process_length, batch_size)
+    DepthSplatting(input_video_path, output_video_path,  video_depth, depth_vis,max_disp,process_length, batch_size)
     print("depth splatting finished. ")
 
 if __name__ == "__main__":
