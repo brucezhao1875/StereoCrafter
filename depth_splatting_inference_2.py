@@ -36,8 +36,9 @@ def read_video_frames(video_path, process_length, target_fps, max_res, dataset="
         width = dataset_res_dict[dataset][1]
 
     vid = VideoReader(video_path, ctx=cpu(0), width=width, height=height)
-
+    vid_orig = VideoReader(video_path, ctx=cpu(0))
     fps = vid.get_avg_fps() if target_fps == -1 else target_fps
+    orig_fps = vid_orig.get_avg_fps()
     stride = round(vid.get_avg_fps() / fps)
     stride = max(stride, 1)
     frames_idx = list(range(0, len(vid), stride))
@@ -48,6 +49,7 @@ def read_video_frames(video_path, process_length, target_fps, max_res, dataset="
         frames_idx = frames_idx[:process_length]
     print( f"==> final processing shape: {len(frames_idx), *vid.get_batch([0]).shape[1:]}.Now begin read in frames by vid.get_batch()"  )
     frames = []
+    frames_orig = []
     batch_size = 100  # 每次读取并处理100帧
 
     for i in range(0, len(frames_idx), batch_size):
@@ -55,6 +57,8 @@ def read_video_frames(video_path, process_length, target_fps, max_res, dataset="
         # 读取一批帧
         batch_frames = vid.get_batch(frames_idx[i:i + batch_size]).asnumpy().astype("float32") / 255.0
         frames.append(batch_frames)
+        batch_frames_orig = vid_orig.get_batch(frames_idx[i:i + batch_size]).asnumpy().astype("float32") / 255.0
+        frames_orig.append(batch_frames_orig)
         duration_batch = time.time() - start_batch
         print(f"读取第 {i} 到 {min(i + batch_size, len(frames_idx))} 帧耗时: {duration_batch:.4f} 秒")
     t1 = time.time()
@@ -62,7 +66,7 @@ def read_video_frames(video_path, process_length, target_fps, max_res, dataset="
     frames = np.concatenate(frames, axis=0)
     t2 = time.time()
     print(f"==> read in frames successful. read_video_frames() finished.总耗时: {t2 - t0:.2f} 秒,其中读入所有帧 {t1 - t0:.2f} 秒,concat all batches {t2 - t1:.2f} 秒.")
-    return frames, fps, original_height, original_width
+    return frames, fps, frames_orig, orig_fps, original_height, original_width
 
 class DepthCrafterDemo:
     def __init__(
@@ -124,7 +128,7 @@ class DepthCrafterDemo:
         set_seed(seed)
 
         # 注意：这里的frames也是全量读入的，也就是说：如果一个视频足够长，那么在这一个环节应该也会遇到内存不足导致失败的。
-        frames, target_fps, original_height, original_width = read_video_frames(input_video_path,process_length,target_fps,max_res,dataset, )
+        frames, target_fps, frames_orig, orig_fps, original_height, original_width = read_video_frames(input_video_path,process_length,target_fps,max_res,dataset, )
 
         # inference the depth map using the DepthCrafter pipeline
         # 这里用到了over_lap. 有个问题是：frames是整个视频的全量frames，那么能否实现frames分批读入？
@@ -161,7 +165,7 @@ class DepthCrafterDemo:
 
         t1 = time.time()
         print(f"finished infer the depth.it costs {t1 - t0:.2f} seconds.")
-        return frames, target_fps, res, vis
+        return frames_orig, orig_fps, res, vis
     
 
 class ForwardWarpStereo(nn.Module):
@@ -203,7 +207,7 @@ class ForwardWarpStereo(nn.Module):
             return res, occlu_map
         
 
-def DepthSplatting(input_video_path, output_video_path,  video_depth, depth_vis, max_disp, process_length, batch_size):
+def DepthSplatting(input_video_path, output_video_path,  frames_orig, orig_fps,  video_depth, depth_vis, max_disp, process_length, batch_size):
     '''
     Depth-Based Video Splatting Using the Video Depth.
     Args:
@@ -215,9 +219,11 @@ def DepthSplatting(input_video_path, output_video_path,  video_depth, depth_vis,
         batch_size: The batch size for splatting to save GPU memory. 
     '''
     t0 = time.time()
-    vid_reader = VideoReader(input_video_path, ctx=cpu(0))
-    original_fps = vid_reader.get_avg_fps()
-    input_frames = vid_reader[:].asnumpy() / 255.0
+    #vid_reader = VideoReader(input_video_path, ctx=cpu(0))
+    #original_fps = vid_reader.get_avg_fps()
+    #input_frames = vid_reader[:].asnumpy().astype("float32") / 255.0
+    original_fps = orig_fps
+    input_frames = frames_orig
     if process_length != -1 and process_length < len(input_frames):
         input_frames = input_frames[:process_length]
         video_depth = video_depth[:process_length]
@@ -278,9 +284,9 @@ def DepthSplatting(input_video_path, output_video_path,  video_depth, depth_vis,
 def main(input_video_path: str, output_video_path: str, unet_path: str, pre_trained_path: str, max_disp: float = 20.0, process_length = -1,batch_size = 20):
     depthcrafter_demo = DepthCrafterDemo(unet_path=unet_path,   pre_trained_path=pre_trained_path)
     print("Starting depth inference...")  #打印进度，开始depth infer...
-    input_frames, target_fps, video_depth, depth_vis = depthcrafter_demo.infer( input_video_path,output_video_path,process_length )
+    frames_orig, orig_fps, video_depth, depth_vis = depthcrafter_demo.infer( input_video_path,output_video_path,process_length )
     print("depth inference finished. Starting DepthSplatting...")
-    DepthSplatting(input_video_path, output_video_path,  video_depth, depth_vis,max_disp,process_length, batch_size)
+    DepthSplatting(input_video_path, output_video_path, frames_orig, orig_fps, video_depth, depth_vis,max_disp,process_length, batch_size)
     print("depth splatting finished. ")
 
 if __name__ == "__main__":
