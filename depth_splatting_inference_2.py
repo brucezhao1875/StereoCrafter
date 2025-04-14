@@ -19,6 +19,7 @@ from dependency.DepthCrafter.depthcrafter.utils import vis_sequence_depth
 from Forward_Warp import forward_warp
 
 def read_video_frames(video_path, process_length, target_fps, max_res, dataset="open"):
+    t0 = time.time()
     if dataset == "open":
         print("==> processing video: ", video_path)
         vid = VideoReader(video_path, ctx=cpu(0))
@@ -56,10 +57,11 @@ def read_video_frames(video_path, process_length, target_fps, max_res, dataset="
         frames.append(batch_frames)
         duration_batch = time.time() - start_batch
         print(f"读取第 {i} 到 {min(i + batch_size, len(frames_idx))} 帧耗时: {duration_batch:.4f} 秒")
-
+    t1 = time.time()
     # Concatenate all batches and return the final frames
     frames = np.concatenate(frames, axis=0)
-    print(f"==> read in frames successful. read_video_frames() finished.")
+    t2 = time.time()
+    print(f"==> read in frames successful. read_video_frames() finished.总耗时: {t2 - t0:.2f} 秒,其中读入所有帧 {t1 - t0:.2f} 秒,concat all batches {t2 - t1:.2f} 秒.")
     return frames, fps, original_height, original_width
 
 class DepthCrafterDemo:
@@ -126,6 +128,9 @@ class DepthCrafterDemo:
 
         # inference the depth map using the DepthCrafter pipeline
         # 这里用到了over_lap. 有个问题是：frames是整个视频的全量frames，那么能否实现frames分批读入？
+
+        print("now i will try to infer the depth...")
+        t0 = time.time()
         with torch.inference_mode():
             res = self.pipe(frames,height=frames.shape[1],width=frames.shape[2],output_type="np",
                             guidance_scale=guidance_scale,num_inference_steps=num_denoising_steps,
@@ -154,7 +159,9 @@ class DepthCrafterDemo:
             np.savez_compressed(save_path + ".npz", depth=res)
             write_video(save_path + "_depth_vis.mp4", vis*255.0, fps=target_fps, video_codec="h264", options={"crf": "16"})
 
-        return res, vis
+        t1 = time.time()
+        print(f"finished infer the depth.it costs {t1 - t0:.2f} seconds.")
+        return frames, target_fps, res, vis
     
 
 class ForwardWarpStereo(nn.Module):
@@ -196,7 +203,7 @@ class ForwardWarpStereo(nn.Module):
             return res, occlu_map
         
 
-def DepthSplatting(input_video_path, output_video_path, video_depth, depth_vis, max_disp, process_length, batch_size):
+def DepthSplatting(input_video_path, output_video_path, input_frames, target_fps, video_depth, depth_vis, max_disp, process_length, batch_size):
     '''
     Depth-Based Video Splatting Using the Video Depth.
     Args:
@@ -207,9 +214,13 @@ def DepthSplatting(input_video_path, output_video_path, video_depth, depth_vis, 
         process_length: The length of video to process.
         batch_size: The batch size for splatting to save GPU memory. 
     '''
-    vid_reader = VideoReader(input_video_path, ctx=cpu(0))
-    original_fps = vid_reader.get_avg_fps()
-    input_frames = vid_reader[:].asnumpy() / 255.0
+    #vid_reader = VideoReader(input_video_path, ctx=cpu(0))
+    #original_fps = vid_reader.get_avg_fps()
+    #input_frames = vid_reader[:].asnumpy() / 255.0
+    t0 = time.time()
+
+    original_fps = target_fps
+    input_frames = input_frames
 
     if process_length != -1 and process_length < len(input_frames):
         input_frames = input_frames[:process_length]
@@ -229,10 +240,13 @@ def DepthSplatting(input_video_path, output_video_path, video_depth, depth_vis, 
         (width * 2, height * 2)
     )
 
+    t1 = time.time()
+    print(f"in DepthSplatting . prepare step  costs {t1 - t0:.2f} seconds.")
+
     for i in range(0, num_frames, batch_size):
         #打印当前的进度，以便于查看程序执行进度
         print(f"Processing batch {i // batch_size + 1} of {num_frames // batch_size + 1}")
-        batch_frames = input_frames[i:i+batch_size]
+        batch_frames = input_frames[i:i+batch_size]   #这个切片不会导致越界
         batch_depth = video_depth[i:i+batch_size]
         batch_depth_vis = depth_vis[i:i+batch_size]
 
@@ -261,14 +275,16 @@ def DepthSplatting(input_video_path, output_video_path, video_depth, depth_vis, 
         del left_video, disp_map, right_video, occlusion_mask
         torch.cuda.empty_cache()
         gc.collect()
+    t2 = time.time()
+    print(f"in DepthSplatting . finished all work. all the loops costs {t2 - t1:.2f} seconds.")
     out.release()
 
-def main(input_video_path: str, output_video_path: str, unet_path: str, pre_trained_path: str, max_disp: float = 20.0, process_length = -1,batch_size = 10):
+def main(input_video_path: str, output_video_path: str, unet_path: str, pre_trained_path: str, max_disp: float = 20.0, process_length = -1,batch_size = 20):
     depthcrafter_demo = DepthCrafterDemo(unet_path=unet_path,   pre_trained_path=pre_trained_path)
     print("Starting depth inference...")  #打印进度，开始depth infer...
-    video_depth, depth_vis = depthcrafter_demo.infer( input_video_path,output_video_path,process_length )
+    input_frames, target_fps, video_depth, depth_vis = depthcrafter_demo.infer( input_video_path,output_video_path,process_length )
     print("depth inference finished. Starting DepthSplatting...")
-    DepthSplatting(input_video_path, output_video_path, video_depth, depth_vis,max_disp,process_length, batch_size)
+    DepthSplatting(input_video_path, output_video_path, input_frames, target_fps, video_depth, depth_vis,max_disp,process_length, batch_size)
     print("depth splatting finished. ")
 
 if __name__ == "__main__":
