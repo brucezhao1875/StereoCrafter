@@ -116,6 +116,7 @@ class DepthCrafterDemo:
     ):
         set_seed(seed)
 
+        # 注意：这里的frames也是全量读入的，也就是说：如果一个视频足够长，那么在这一个环节应该也会遇到内存不足导致失败的。
         frames, target_fps, original_height, original_width = read_video_frames(
             input_video_path,
             process_length,
@@ -125,6 +126,7 @@ class DepthCrafterDemo:
         )
 
         # inference the depth map using the DepthCrafter pipeline
+        # 这里用到了over_lap. 有个问题是：frames是整个视频的全量frames，那么能否实现frames分批读入？
         with torch.inference_mode():
             res = self.pipe(
                 frames,

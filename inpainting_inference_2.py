@@ -121,7 +121,8 @@ def main(pre_trained_path,    unet_path,    input_video_path,    save_dir,    fr
     os.makedirs(save_dir, exist_ok=True)
     video_name = input_video_path.split("/")[-1].replace(".mp4", "").replace("_splatting_results", "") + "_inpainting_results"
 
-    video_reader = VideoReader(input_video_path, ctx=cpu(0))
+    #video_reader = VideoReader(input_video_path, ctx=cpu(0))
+    video_reader = VideoReader(input_video_path, ctx=cpu())
     fps = video_reader.get_avg_fps()
     num_frames = len(video_reader)   #总的帧数
     height, width = video_reader[0].shape[0] // 2, video_reader[0].shape[1] // 2    #触发读入第一帧，获取尺寸
@@ -180,7 +181,9 @@ def main(pre_trained_path,    unet_path,    input_video_path,    save_dir,    fr
             input_frames_i, mask_frames_i, pipeline, tile_num,
             spatial_n_compress=8, min_guidance_scale=1.01, max_guidance_scale=1.01,
             decode_chunk_size=8, fps=7, motion_bucket_id=127, noise_aug_strength=0.0,
-            num_inference_steps=8
+            #2025.4.16.为了测试效果，把这里的num_inference_steps改为2。缺省是8。
+            #num_inference_steps=8
+            num_inference_steps=2
         ).unsqueeze(0)
 
         if video_latents.dtype == torch.float16:
